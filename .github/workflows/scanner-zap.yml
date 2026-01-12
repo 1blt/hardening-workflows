@@ -772,19 +772,29 @@ jobs:
       - name: Generate ZAP summary
         shell: bash
         env:
-          ZAP_PARSER: ${{ github.repository == 'huntridge-labs/hardening-workflows' && './.github/scripts/parse-zap-results.sh' || './.hardening-workflows/.github/scripts/parse-zap-results.sh' }}
+          ZAP_PARSER: ${{ (github.repository == 'huntridge-labs/hardening-workflows' || github.repository == '1blt/hardening-workflows') && './.github/scripts/parse-zap-results.sh' || './.hardening-workflows/.github/scripts/parse-zap-results.sh' }}
           ZAP_SCAN_TYPE: ${{ needs.prepare-targets.outputs.zap_scan_type }}
         run: |
           set -euo pipefail
 
           # Get summary script path
-          if [[ "${{ github.repository }}" == "huntridge-labs/hardening-workflows" ]]; then
+          if [[ "${{ github.repository }}" == "huntridge-labs/hardening-workflows" ]] || [[ "${{ github.repository }}" == "1blt/hardening-workflows" ]]; then
             SUMMARY_SCRIPT="./.github/scripts/generate-zap-summary.sh"
           else
             SUMMARY_SCRIPT="./.hardening-workflows/.github/scripts/generate-zap-summary.sh"
           fi
 
-          chmod +x "$ZAP_PARSER" "$SUMMARY_SCRIPT"
+          # Only chmod if files exist
+          if [[ -f "$ZAP_PARSER" ]] && [[ -f "$SUMMARY_SCRIPT" ]]; then
+            chmod +x "$ZAP_PARSER" "$SUMMARY_SCRIPT"
+          else
+            echo "Error: Required scripts not found:"
+            echo "  ZAP_PARSER: $ZAP_PARSER (exists: $(test -f "$ZAP_PARSER" && echo yes || echo no))"
+            echo "  SUMMARY_SCRIPT: $SUMMARY_SCRIPT (exists: $(test -f "$SUMMARY_SCRIPT" && echo yes || echo no))"
+            ls -la .github/scripts/ 2>/dev/null || echo ".github/scripts/ not found"
+            ls -la .hardening-workflows/.github/scripts/ 2>/dev/null || echo ".hardening-workflows/.github/scripts/ not found"
+            exit 1
+          fi
 
           # Run summary generation
           "$SUMMARY_SCRIPT"
