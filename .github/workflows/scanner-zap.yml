@@ -164,6 +164,11 @@ on:
         required: false
         type: boolean
         default: false
+      artifact_suffix:
+        description: 'Optional suffix to differentiate artifacts when running multiple ZAP workflows in parallel (e.g., "job1", "baseline-scan"). If not provided, artifacts use deterministic naming based on configuration.'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -187,6 +192,7 @@ jobs:
       rules_file_name: ${{ steps.targets.outputs.rules_file_name }}
       cmd_options: ${{ steps.targets.outputs.cmd_options }}
       config_hash: ${{ steps.targets.outputs.config_hash }}
+      artifact_suffix: ${{ steps.targets.outputs.artifact_suffix }}
       app_image_ref: ${{ steps.targets.outputs.app_image_ref }}
       app_build_context: ${{ steps.targets.outputs.app_build_context }}
       app_dockerfile: ${{ steps.targets.outputs.app_dockerfile }}
@@ -439,10 +445,18 @@ jobs:
             config_hash="${GITHUB_RUN_ID: -8}"
           fi
 
+          # Handle optional artifact suffix for parallel workflows
+          ARTIFACT_SUFFIX="${{ inputs.artifact_suffix }}"
+          if [[ -n "${ARTIFACT_SUFFIX// /}" ]]; then
+            # Sanitize suffix for artifact naming
+            ARTIFACT_SUFFIX=$(echo "$ARTIFACT_SUFFIX" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9._-')
+          fi
+
           echo "scan_mode=$SCAN_MODE" | tee -a "$GITHUB_OUTPUT"
           echo "invocation_key=$invocation_key" | tee -a "$GITHUB_OUTPUT"
           echo "invocation_nonce=$config_hash" | tee -a "$GITHUB_OUTPUT"
           echo "config_hash=$config_hash" | tee -a "$GITHUB_OUTPUT"
+          echo "artifact_suffix=$ARTIFACT_SUFFIX" | tee -a "$GITHUB_OUTPUT"
           echo "targets_json=$TARGETS_JSON" | tee -a "$GITHUB_OUTPUT"
           echo "primary_url=$PRIMARY_URL" | tee -a "$GITHUB_OUTPUT"
           echo "healthcheck_url=$HEALTHCHECK_URL" | tee -a "$GITHUB_OUTPUT"
@@ -562,12 +576,17 @@ jobs:
 
           scan_type="${{ needs.prepare-targets.outputs.zap_scan_type }}"
           config_hash="${{ needs.prepare-targets.outputs.config_hash }}"
+          artifact_suffix="${{ needs.prepare-targets.outputs.artifact_suffix }}"
 
-          # Format: zap-reports-{config_hash}-{scan_type}-{target_hash}
+          # Format: zap-reports-{config_hash}-{scan_type}-{target_hash}[-{suffix}]
           # config_hash: consistent per workflow configuration
           # scan_type: baseline/full/api
           # target_hash: unique per matrix target
+          # suffix: optional user-provided suffix for parallel workflows
           prefix="${config_hash}-${scan_type}-${target_hash}"
+          if [[ -n "${artifact_suffix}" ]]; then
+            prefix="${prefix}-${artifact_suffix}"
+          fi
 
           echo "prefix=$prefix" | tee -a "$GITHUB_OUTPUT"
 
@@ -736,7 +755,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: huntridge-labs/hardening-workflows
-          ref: 2.10.0
+          ref: feat/zap-scanner
           path: .hardening-workflows
           token: ${{ secrets.HARDENING_WORKFLOWS_CHECKOUT_TOKEN || github.token }}
           sparse-checkout: |
@@ -774,7 +793,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: scanner-summary-zap-${{ needs.prepare-targets.outputs.config_hash }}
+          name: scanner-summary-zap-${{ needs.prepare-targets.outputs.config_hash }}${{ needs.prepare-targets.outputs.artifact_suffix && format('-{0}', needs.prepare-targets.outputs.artifact_suffix) || '' }}
           path: scanner-summaries/zap.md
           retention-days: 7
 

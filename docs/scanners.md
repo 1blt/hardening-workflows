@@ -394,6 +394,44 @@ This integration supports:
 | `zap_compose_file` | Compose file path (when `zap_scan_mode=compose`) | `docker-compose.yml` | Yes (when `compose`) |
 | `allow_failure` + `severity_threshold` | Controls failing the workflow on ZAP findings | `true` + `high` | No |
 
+**Required permissions:**
+
+When calling the ZAP scanner workflow, you must provide the following permissions in your calling workflow:
+
+```yaml
+permissions:
+  actions: read
+  checks: write
+  pull-requests: write
+  security-events: write
+  id-token: write
+  contents: read
+```
+
+**Example workflow with permissions:**
+
+```yaml
+name: ZAP Security Scan
+
+on: [pull_request, push]
+
+permissions:
+  actions: read
+  checks: write
+  pull-requests: write
+  security-events: write
+  id-token: write
+  contents: read
+
+jobs:
+  security:
+    uses: huntridge-labs/hardening-workflows/.github/workflows/reusable-security-hardening.yml@feat/zap-scanner
+    with:
+      scanners: zap
+      zap_target_urls: http://127.0.0.1:8080
+    secrets: inherit
+```
+
 **Recommended: config-file driven ZAP**
 
 Use a config file to avoid passing many inputs and to define multiple targets for matrix scanning.
