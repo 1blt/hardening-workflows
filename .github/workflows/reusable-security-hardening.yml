@@ -625,7 +625,6 @@ jobs:
       zap_scan_type: ${{ inputs.zap_scan_type }}
       zap_api_spec: ${{ inputs.zap_api_spec }}
       zap_max_duration_minutes: ${{ inputs.zap_max_duration_minutes }}
-      artifact_suffix: ${{ inputs.zap_artifact_suffix }}
       fail_on_severity: ${{ inputs.allow_failure == false && inputs.severity_threshold || 'none' }}
       post_pr_comment: false # PR comment would be redundant here; summary job covers it
       enable_code_security: false # DAST findings are not integrated into GitHub Code Security
