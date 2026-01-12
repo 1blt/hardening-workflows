@@ -40,10 +40,10 @@ write_summary_header() {
   local scan_type_display="$2"
 
   if [[ "$output" == *"zap.md" ]]; then
-    echo "<details><summary>🕷️ ZAP (DAST)${scan_type_display}</summary>" >> "$output"
-    echo -e "\n**Status:** ✅ Completed\n" >> "$output"
+    echo "<details><summary>ZAP (DAST)${scan_type_display}</summary>" >> "$output"
+    echo -e "\n**Status:** Completed\n" >> "$output"
   else
-    echo -e "## 🕷️ ZAP DAST Summary${scan_type_display}\n" >> "$output"
+    echo -e "## ZAP DAST Summary${scan_type_display}\n" >> "$output"
   fi
 }
 
@@ -51,24 +51,24 @@ write_summary_header() {
 write_skipped_summary() {
   local scan_type_display="$1"
 
-  echo "<details><summary>🕷️ ZAP (DAST)${scan_type_display}</summary>" > scanner-summaries/zap.md
-  echo -e "\n**Status:** ⏭️ Skipped\n</details>" >> scanner-summaries/zap.md
+  echo "<details><summary>ZAP (DAST)${scan_type_display}</summary>" > scanner-summaries/zap.md
+  echo -e "\n**Status:** Skipped\n</details>" >> scanner-summaries/zap.md
 
   if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-    echo -e "## 🕷️ ZAP DAST Summary${scan_type_display}\n\n**Status:** ⏭️ No scans performed" >> "$GITHUB_STEP_SUMMARY"
+    echo -e "## ZAP DAST Summary${scan_type_display}\n\n**Status:** No scans performed" >> "$GITHUB_STEP_SUMMARY"
   fi
 }
 
-echo "📊 Generating ZAP DAST summary..."
+echo "Generating ZAP DAST summary..."
 
 # Debug: Show what we're looking for
-echo "🔍 Looking for ZAP artifacts in: zap-downloads/"
-echo "🔍 Current directory: $(pwd)"
-echo "🔍 Zap downloads directory structure:"
-ls -la zap-downloads/ 2>/dev/null || echo "  ⚠️  zap-downloads/ directory not found"
+echo "Looking for ZAP artifacts in: zap-downloads/"
+echo "Current directory: $(pwd)"
+echo "Zap downloads directory structure:"
+ls -la zap-downloads/ 2>/dev/null || echo "  Warning: zap-downloads/ directory not found"
 echo ""
-echo "🔍 Searching recursively for report_json.json files:"
-find zap-downloads/ -name "report_json.json" -type f 2>/dev/null || echo "  ⚠️  No report_json.json files found"
+echo "Searching recursively for report_json.json files:"
+find zap-downloads/ -name "report_json.json" -type f 2>/dev/null || echo "  Warning: No report_json.json files found"
 echo ""
 
 # Initialize aggregates
@@ -80,10 +80,10 @@ declare -a SCAN_RESULTS=()
 # Note: actions/download-artifact@v6 behavior:
 #   - Single artifact: extracts directly to path (zap-downloads/report_json.json)
 #   - Multiple artifacts: creates subdirectories (zap-downloads/artifact-name/report_json.json)
-echo "🔍 Searching for report files..."
+echo "Searching for report files..."
 while IFS= read -r report; do
   [ -f "$report" ] || continue
-  echo "  ✅ Found report: $report"
+  echo "  Found report: $report"
 
   # Determine artifact name from path
   # Path can be either:
@@ -96,28 +96,28 @@ while IFS= read -r report; do
     # For now, we'll use a placeholder and extract scan_type from ZAP_SCAN_TYPE env var
     artifact_name="zap-reports-single-artifact"
     scan_type="${ZAP_SCAN_TYPE:-unknown}"
-    echo "  📦 Single artifact detected, using scan_type from env: $scan_type"
+    echo "  Single artifact detected, using scan_type from env: $scan_type"
   else
     # Multiple artifacts case - artifact name is the directory name
     artifact_name=$(basename "$dir")
-    echo "  📦 Artifact name: $artifact_name"
+    echo "  Artifact name: $artifact_name"
 
     # Parse artifact name format: zap-reports-{config_hash}-{scan_type}-{target_hash}
     # Example: zap-reports-a1b2c3d4-baseline-e5f6a7
 
     # Remove "zap-reports-" prefix
     remainder="${artifact_name#zap-reports-}"
-    echo "  🔍 After removing prefix: $remainder"
+    echo "  After removing prefix: $remainder"
 
     # Format: {config_hash}-{scan_type}-{target_hash}
     # Look for pattern: {hex8}-{scan_type}-{hex6}
     if [[ "$remainder" =~ ^[0-9a-f]{8}-(baseline|full|api)-[0-9a-f]{6}$ ]]; then
       scan_type="${BASH_REMATCH[1]}"
-      echo "  ✅ Extracted scan_type: $scan_type"
+      echo "  Extracted scan_type: $scan_type"
     else
       # Fallback
       scan_type="unknown"
-      echo "  ⚠️  Could not extract scan_type, using: $scan_type"
+      echo "  Warning: Could not extract scan_type, using: $scan_type"
     fi
   fi
 
@@ -135,12 +135,12 @@ while IFS= read -r report; do
   TOTAL_LOW=$((TOTAL_LOW + low))
   SCANNED=$((SCANNED + 1))
 
-  echo "  ✅ $scan_type scan on $target: $total alerts ($crit crit, $high high, $med med, $low low)"
+  echo "  $scan_type scan on $target: $total alerts ($crit crit, $high high, $med med, $low low)"
 done < <(find zap-downloads/ -name "report_json.json" -type f 2>/dev/null)
 
 # Check if we have results
 if [ "$SCANNED" -eq 0 ]; then
-  echo "⏭️ No ZAP scan results found"
+  echo "No ZAP scan results found"
   write_skipped_summary "$(format_scan_type)"
   exit 0
 fi
@@ -156,13 +156,26 @@ OUTPUT_TARGETS=("scanner-summaries/zap.md")
 for output in "${OUTPUT_TARGETS[@]}"; do
   write_summary_header "$output" "$SCAN_TYPE_DISPLAY"
 
-  # Summary table
-  cat >> "$output" << EOF
-### 📊 Overall Findings Summary
+  # Expected values (baseline - set to 0 for now, can be customized per target)
+  EXP_CRIT=0; EXP_HIGH=0; EXP_MED=0; EXP_LOW=0
+  EXP_TOTAL=0
 
-| 🚨 Critical | ⚠️ High | 🟡 Medium | 🔵 Low | 📦 Total |
-|-------------|---------|-----------|---------|----------|
-| **$TOTAL_CRIT** | **$TOTAL_HIGH** | **$TOTAL_MED** | **$TOTAL_LOW** | **$TOTAL** |
+  # Calculate differences
+  DIFF_CRIT=$((TOTAL_CRIT - EXP_CRIT))
+  DIFF_HIGH=$((TOTAL_HIGH - EXP_HIGH))
+  DIFF_MED=$((TOTAL_MED - EXP_MED))
+  DIFF_LOW=$((TOTAL_LOW - EXP_LOW))
+  DIFF_TOTAL=$((TOTAL - EXP_TOTAL))
+
+  # Summary table with found/expected/difference rows
+  cat >> "$output" << EOF
+### Overall Findings Summary
+
+|             | Critical | High | Medium | Low | Total |
+|-------------|----------|------|--------|-----|-------|
+| **Found**   | $TOTAL_CRIT | $TOTAL_HIGH | $TOTAL_MED | $TOTAL_LOW | $TOTAL |
+| **Expected** | $EXP_CRIT | $EXP_HIGH | $EXP_MED | $EXP_LOW | $EXP_TOTAL |
+| **Difference** | $DIFF_CRIT | $DIFF_HIGH | $DIFF_MED | $DIFF_LOW | $DIFF_TOTAL |
 
 **Scanned:** $SCANNED target(s) | **Scan Failures:** $FAILED
 
@@ -170,39 +183,45 @@ EOF
 
   # Scan breakdown (only for multiple scans)
   if [ "$SCANNED" -ne 1 ]; then
-    echo "### 📦 Scan Breakdown" >> "$output"
-    echo -e "\n| Scan Type | Target | 🚨 Crit | ⚠️ High | 🟡 Med | 🔵 Low | Total | Unique | Status |" >> "$output"
-    echo "|-----------|--------|---------|---------|--------|--------|-------|--------|--------|" >> "$output"
+    echo "### Scan Breakdown" >> "$output"
+    echo -e "\n| Scan Type | Target | Crit | High | Med | Low | Total | Unique | Status |" >> "$output"
+    echo "|-----------|--------|------|------|-----|-----|-------|--------|--------|" >> "$output"
     for data in "${SCAN_RESULTS[@]}"; do
       IFS='|' read -r scan_type target c h m l t u artifact_name <<< "$data"
-      echo "| $scan_type | \`$target\` | $c | $h | $m | $l | $t | $u | ✅ |" >> "$output"
+      echo "| $scan_type | \`$target\` | $c | $h | $m | $l | $t | $u | Pass |" >> "$output"
     done
     echo "" >> "$output"
   fi
 
   # Detailed findings
-  echo -e "### 🔍 Detailed Findings by Scan\n" >> "$output"
+  echo -e "### Detailed Findings by Scan\n" >> "$output"
   for data in "${SCAN_RESULTS[@]}"; do
     IFS='|' read -r scan_type target crit high med low total unique artifact_name <<< "$data"
 
-    # Determine emoji
-    if [ "$crit" -gt 0 ]; then emoji="🚨"
-    elif [ "$high" -gt 0 ]; then emoji="⚠️"
-    elif [ "$total" -gt 0 ]; then emoji="🟡"
-    else emoji="✅"; fi
+    # Expected values per scan (baseline - set to 0 for now)
+    exp_crit=0; exp_high=0; exp_med=0; exp_low=0; exp_total=0
+
+    # Calculate per-scan differences
+    diff_crit=$((crit - exp_crit))
+    diff_high=$((high - exp_high))
+    diff_med=$((med - exp_med))
+    diff_low=$((low - exp_low))
+    diff_total=$((total - exp_total))
 
     cat >> "$output" << EOF
 <details>
-<summary>$emoji <strong>$scan_type scan</strong> on <code>$target</code> - $total alerts ($unique unique)</summary>
+<summary><strong>$scan_type scan</strong> on <code>$target</code> - $total alerts ($unique unique)</summary>
 
 **Target:** \`$target\`
 **Scan Type:** $scan_type
 
 #### Alert Summary
 
-| 🚨 Critical | ⚠️ High | 🟡 Medium | 🔵 Low | Total | Unique |
-|-------------|---------|-----------|---------|-------|--------|
-| $crit | $high | $med | $low | $total | $unique |
+|             | Critical | High | Medium | Low | Total | Unique |
+|-------------|----------|------|--------|-----|-------|--------|
+| **Found**   | $crit | $high | $med | $low | $total | $unique |
+| **Expected** | $exp_crit | $exp_high | $exp_med | $exp_low | $exp_total | - |
+| **Difference** | $diff_crit | $diff_high | $diff_med | $diff_low | $diff_total | - |
 
 EOF
 
@@ -217,12 +236,12 @@ EOF
 
     if [ -f "$report" ]; then
       if [ "$total" -eq 0 ]; then
-        echo "✅ No security alerts detected" >> "$output"
+        echo "No security alerts detected" >> "$output"
       else
         # Critical findings (nested collapsible)
         if [ "$crit" -gt 0 ]; then
           echo "<details>" >> "$output"
-          echo "<summary>🚨 <strong>Critical Severity</strong> ($crit findings)</summary>" >> "$output"
+          echo "<summary><strong>Critical Severity</strong> ($crit findings)</summary>" >> "$output"
           echo "" >> "$output"
           "$ZAP_PARSER" details "$report" -s critical -l 50 >> "$output"
           echo "</details>" >> "$output"
@@ -232,7 +251,7 @@ EOF
         # High findings (nested collapsible)
         if [ "$high" -gt 0 ]; then
           echo "<details>" >> "$output"
-          echo "<summary>⚠️ <strong>High Severity</strong> ($high findings)</summary>" >> "$output"
+          echo "<summary><strong>High Severity</strong> ($high findings)</summary>" >> "$output"
           echo "" >> "$output"
           "$ZAP_PARSER" details "$report" -s high -l 50 >> "$output"
           echo "</details>" >> "$output"
@@ -242,7 +261,7 @@ EOF
         # Medium findings (compact table)
         if [ "$med" -gt 0 ]; then
           echo "<details>" >> "$output"
-          echo "<summary>🟡 <strong>Medium Severity</strong> ($med findings)</summary>" >> "$output"
+          echo "<summary><strong>Medium Severity</strong> ($med findings)</summary>" >> "$output"
           echo "" >> "$output"
           "$ZAP_PARSER" compact-table "$report" -s medium -l 50 >> "$output"
           echo "" >> "$output"
@@ -253,7 +272,7 @@ EOF
         # Low findings (compact table)
         if [ "$low" -gt 0 ]; then
           echo "<details>" >> "$output"
-          echo "<summary>🔵 <strong>Low Severity</strong> ($low findings)</summary>" >> "$output"
+          echo "<summary><strong>Low Severity</strong> ($low findings)</summary>" >> "$output"
           echo "" >> "$output"
           "$ZAP_PARSER" compact-table "$report" -s low -l 50 >> "$output"
           echo "" >> "$output"
@@ -268,10 +287,10 @@ EOF
 
   # Artifact link
   if [ -n "${GITHUB_REPOSITORY:-}" ] && [ -n "${GITHUB_RUN_ID:-}" ]; then
-    echo "**📁 Artifacts:** [ZAP Scan Reports](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}#artifacts)" >> "$output"
+    echo "**Artifacts:** [ZAP Scan Reports](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}#artifacts)" >> "$output"
   fi
 
   [[ "$output" == *"zap.md" ]] && echo -e "\n</details>" >> "$output"
 done
 
-echo "✅ ZAP summary generated"
+echo "ZAP summary generated"
